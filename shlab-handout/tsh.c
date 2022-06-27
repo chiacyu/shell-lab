@@ -168,8 +168,12 @@ void eval(char *cmdline)
     char *argv[MAXARGS];
     char buf[MAXLINE];
     int bg;
-
+    sigset_t mask_all, mask_one, prev_one;
     pid_t pid;
+
+    sigfillset(&mask_all);
+    sigemptyset(&mask_one);
+    sigaddset(&mask_one, SIGCHLD);
 
     strcpy(buf, cmdline);
 
@@ -177,23 +181,38 @@ void eval(char *cmdline)
     if (argv[0] == NULL) return;
 
     if(!builtin_cmd(argv)){
-        if(pid = fork() == 0){
+
+        sigprocmask(SIG_BLOCK, &mask_one, &prev_one);
+        if((pid = fork()) == 0){
+            sigprocmask(SIG_SETMASK, &prev_one, NULL);
             if(execve(argv[0], argv, environ) < 0){
                 printf("%s : command not found\n", argv[0]);
                 exit(0);
             }
         }
-
-        if(!bg){
-            int status;
-            if(waitpid(pid, &status, 0) < 0){
-                unix_error("waitfg: waitpid error");
-            }
-        }
-        else{
-            printf("%d %s", pid, cmdline);
-        }
+        sigprocmask(SIG_BLOCK, &mask_all, NULL);
+        addjob(jobs, pid, bg, cmdline);
+        sigprocmask(SIG_SETMASK, &mask_one, NULL);
     }
+
+    switch (builtin_cmd(argv))
+    {
+        case 1:
+            
+            for(int i=0 ; i<MAXJOBS ; i++){
+                kill(jobs[i].pid, SIGKILL);
+            }
+            exit(0);
+            break;
+        
+        case 2:
+
+            break;
+    
+        case 3:
+            break;
+    }
+
     return;
 }
 
@@ -260,6 +279,21 @@ int parseline(const char *cmdline, char **argv)
  */
 int builtin_cmd(char **argv) 
 {
+    if(!strcmp(argv[0], "quit")){
+        return 1;
+    }
+    if(!strcmp(argv[0], "jobs")){
+        return 2;
+    }
+    if(!strcmp(argv[0], "bg")){
+        return 3;
+    }
+    if(!strcmp(argv[0], "fg")){
+        return 4;
+    }
+    if(!strcmp(argv[0], "&")){
+        return 5;
+    }
     return 0;     /* not a builtin command */
 }
 
@@ -292,6 +326,10 @@ void waitfg(pid_t pid)
  */
 void sigchld_handler(int sig) 
 {
+    int olderrno = errno;
+    if( waitpid(-1, NULL, 0)<0 ){
+
+    }
     return;
 }
 
@@ -302,6 +340,7 @@ void sigchld_handler(int sig)
  */
 void sigint_handler(int sig) 
 {
+
     return;
 }
 
