@@ -185,6 +185,7 @@ void eval(char *cmdline)
         sigprocmask(SIG_BLOCK, &mask_one, &prev_one);
         if((pid = fork()) == 0){
             sigprocmask(SIG_SETMASK, &prev_one, NULL);
+            setpgid(0, 0);
             if(execve(argv[0], argv, environ) < 0){
                 printf("%s : command not found\n", argv[0]);
                 exit(0);
@@ -206,10 +207,16 @@ void eval(char *cmdline)
             break;
         
         case 2:
-
+            pid_t pid = getfg
             break;
     
         case 3:
+            break;
+
+        case 4:
+            break;
+
+        case 5:
             break;
     }
 
@@ -327,9 +334,20 @@ void waitfg(pid_t pid)
 void sigchld_handler(int sig) 
 {
     int olderrno = errno;
-    if( waitpid(-1, NULL, 0)<0 ){
+    sigset_t mask_all, prev_all;
+    pid_t pid;
 
+    sigfillset(&mask_all);
+
+    while( (pid = waitpid(-1, NULL, 0))<0 ){
+        sigprocmask(SIG_BLOCK, &mask_all, &prev_all);
+        deletejob(jobs, pid);
+        sigprocmask(SIG_SETMASK, &prev_all, NULL);
     }
+    if (errno != ECHILD){
+        Sio_error("waitpid fail\n");
+    }
+    errno = olderrno;
     return;
 }
 
@@ -340,7 +358,8 @@ void sigchld_handler(int sig)
  */
 void sigint_handler(int sig) 
 {
-
+    pid_t fpid = fgpid(jobs);
+    kill(fpid, SIGINT);
     return;
 }
 
@@ -351,6 +370,8 @@ void sigint_handler(int sig)
  */
 void sigtstp_handler(int sig) 
 {
+    pid_t fpid = fgpid(jobs);
+    kill(fpid, SIGTSTP);
     return;
 }
 
