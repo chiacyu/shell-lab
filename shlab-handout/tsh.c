@@ -194,12 +194,20 @@ void eval(char *cmdline)
         sigprocmask(SIG_BLOCK, &mask_all, NULL);
         addjob(jobs, pid, bg, cmdline);
         sigprocmask(SIG_SETMASK, &mask_one, NULL);
+        
+        if(!bg){
+            int status;
+            if(waitpid(pid, &status, 0)){
+                app_error("waitfg : wait foreground jobs fail\n");
+            }
+        }
+        
     }
 
     switch (builtin_cmd(argv))
     {
+
         case 1:
-            
             for(int i=0 ; i<MAXJOBS ; i++){
                 kill(jobs[i].pid, SIGKILL);
             }
@@ -207,10 +215,11 @@ void eval(char *cmdline)
             break;
         
         case 2:
-            pid_t pid = getfg
+            listjobs(jobs);
             break;
     
         case 3:
+            do_bgfg(argv);
             break;
 
         case 4:
@@ -309,6 +318,12 @@ int builtin_cmd(char **argv)
  */
 void do_bgfg(char **argv) 
 {
+    if(strcmp("bg", argv[0]) == 0){
+        int index = atoi(++argv[1]);
+    }
+    else{
+
+    }
     return;
 }
 
@@ -345,7 +360,7 @@ void sigchld_handler(int sig)
         sigprocmask(SIG_SETMASK, &prev_all, NULL);
     }
     if (errno != ECHILD){
-        Sio_error("waitpid fail\n");
+        app_error("waitpid fail\n");
     }
     errno = olderrno;
     return;
@@ -359,7 +374,7 @@ void sigchld_handler(int sig)
 void sigint_handler(int sig) 
 {
     pid_t fpid = fgpid(jobs);
-    kill(fpid, SIGINT);
+    kill(-fpid, SIGINT);
     return;
 }
 
@@ -371,7 +386,10 @@ void sigint_handler(int sig)
 void sigtstp_handler(int sig) 
 {
     pid_t fpid = fgpid(jobs);
-    kill(fpid, SIGTSTP);
+    if (fpid == 0){
+        exit(0);
+    }
+    kill(-fpid, SIGTSTP);
     return;
 }
 
