@@ -223,6 +223,7 @@ void eval(char *cmdline)
             break;
 
         case 4:
+            do_bgfg(argv);
             break;
 
         case 5:
@@ -307,9 +308,6 @@ int builtin_cmd(char **argv)
     if(!strcmp(argv[0], "fg")){
         return 4;
     }
-    if(!strcmp(argv[0], "&")){
-        return 5;
-    }
     return 0;     /* not a builtin command */
 }
 
@@ -320,9 +318,49 @@ void do_bgfg(char **argv)
 {
     if(strcmp("bg", argv[0]) == 0){
         int index = atoi(++argv[1]);
+        int job_i;
+        pid_t fg_pid = fgpid(jobs);
+        pid_t target;
+        for(int i=0 ; i<MAXJOBS ; i++){
+            if(jobs[i].jid == index || jobs[i].pid == index){
+                target = jobs[i].pid;
+                job_i = i;
+                break;
+            }
+            if( i == MAXJOBS-1){
+                printf("%c%d: No such job\n",argv[1], ++argv[1]);
+                break;
+            }
+        }
+        if(strcmp(jobs[job_i].state, "Stopped") == 0){
+            kill(target, SIGCONT);
+            strcpy(jobs[job_i].state, "Running");
+            setpgid(0, 0);
+        }
+        return;        
     }
-    else{
-
+    else if(strcmp("fg", argv[0]) == 0){
+        int index = stoi(++argv[1]);
+        int job_i;
+        pid_t target = jobs[index].pid;
+        pid_t fg_pid  = fgpid(jobs);
+        for(int i=0 ; i<MAXJOBS ; i++){
+            if(jobs[i].jid == index || jobs[i].pid == index){
+                target = jobs[i].pid;
+                job_i = i;
+                break;
+            }
+            if( i == MAXJOBS-1){
+                printf("%c%d: No such job\n",argv[1], ++argv[1]);
+                break;
+            }
+        }
+        if(strcmp(jobs[job_i].state, "Stopped") == 0){
+            kill(target, SIGCONT);
+            strcpy(jobs[job_i].state, "Foreground");
+            setpgid(target, fg_pid);
+        }
+        return;
     }
     return;
 }
@@ -332,6 +370,8 @@ void do_bgfg(char **argv)
  */
 void waitfg(pid_t pid)
 {
+    int status;
+    
     return;
 }
 
