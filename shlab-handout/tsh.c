@@ -197,7 +197,7 @@ void eval(char *cmdline)
         
         if(!bg){
             int status;
-            if(waitpid(pid, &status, 0)){
+            if(waitpid(pid, &status, 0)<0){
                 app_error("waitfg : wait foreground jobs fail\n");
             }
         }
@@ -321,6 +321,7 @@ void do_bgfg(char **argv)
         int job_i;
         pid_t fg_pid = fgpid(jobs);
         pid_t target;
+
         for(int i=0 ; i<MAXJOBS ; i++){
             if(jobs[i].jid == index || jobs[i].pid == index){
                 target = jobs[i].pid;
@@ -328,22 +329,23 @@ void do_bgfg(char **argv)
                 break;
             }
             if( i == MAXJOBS-1){
-                printf("%c%d: No such job\n",argv[1], ++argv[1]);
+                printf("%c%d: No such job\n",*(++argv[0]), *(++argv[1]));
                 break;
             }
         }
-        if(strcmp(jobs[job_i].state, "Stopped") == 0){
+        if(jobs[job_i].state == ST){
             kill(target, SIGCONT);
-            strcpy(jobs[job_i].state, "Running");
+            jobs[job_i].state = FG;
             setpgid(0, 0);
         }
         return;        
     }
     else if(strcmp("fg", argv[0]) == 0){
-        int index = stoi(++argv[1]);
+        int index = atoi(++argv[1]);
         int job_i;
-        pid_t target = jobs[index].pid;
+        pid_t target;
         pid_t fg_pid  = fgpid(jobs);
+
         for(int i=0 ; i<MAXJOBS ; i++){
             if(jobs[i].jid == index || jobs[i].pid == index){
                 target = jobs[i].pid;
@@ -351,13 +353,13 @@ void do_bgfg(char **argv)
                 break;
             }
             if( i == MAXJOBS-1){
-                printf("%c%d: No such job\n",argv[1], ++argv[1]);
+                printf("%c%d: No such job\n",*(++argv[1]), *(++argv[1]));
                 break;
             }
         }
-        if(strcmp(jobs[job_i].state, "Stopped") == 0){
+        if(jobs[job_i].state == ST){
             kill(target, SIGCONT);
-            strcpy(jobs[job_i].state, "Foreground");
+            jobs[job_i].state = FG;
             setpgid(target, fg_pid);
         }
         return;
@@ -370,8 +372,6 @@ void do_bgfg(char **argv)
  */
 void waitfg(pid_t pid)
 {
-    int status;
-    
     return;
 }
 
@@ -413,8 +413,27 @@ void sigchld_handler(int sig)
  */
 void sigint_handler(int sig) 
 {
+    int olderrno = errno;
+    sigset_t mask_all, prev_all;
+    pid_t pid;
     pid_t fpid = fgpid(jobs);
+
+    if(fpid == 0){
+        return;
+    }
+    sigfillset(&mask_all);
     kill(-fpid, SIGINT);
+
+    while ((pid = waitpid(-1, NULL, 0)) < 0){
+        sigprocmask(SIG_BLOCK, &mask_all, &prev_all);
+        deletejob(jobs, pid);
+        sigprocmask(SIG_SETMASK, &prev_all, NULL);
+    }
+
+    if( errno != ECHILD){
+        app_error("waitpid fail\n");
+    }
+    errno = olderrno;
     return;
 }
 
@@ -426,10 +445,14 @@ void sigint_handler(int sig)
 void sigtstp_handler(int sig) 
 {
     pid_t fpid = fgpid(jobs);
-    if (fpid == 0){
-        exit(0);
+    struct job_t *fjob;
+    if( fpid == 0){
+        return;
     }
+
+    fjob = getjobjid(jobs, fpid);
     kill(-fpid, SIGTSTP);
+    fjob->state = ST;
     return;
 }
 
