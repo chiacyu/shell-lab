@@ -196,10 +196,11 @@ void eval(char *cmdline)
         sigprocmask(SIG_SETMASK, &mask_one, NULL);
         
         if(!bg){
-            int status;
-            if(waitpid(pid, &status, 0)<0){
-                app_error("waitfg : wait foreground jobs fail\n");
-            }
+            waitfg(pid);
+        }
+        else{
+            int jid = pid2jid(pid);
+            printf("[%d] (%d) %s\n", jid, pid, buf);
         }
         
     }
@@ -208,14 +209,16 @@ void eval(char *cmdline)
     {
 
         case 1:
-            for(int i=0 ; i<MAXJOBS ; i++){
-                kill(jobs[i].pid, SIGKILL);
-            }
+            // for(int i=0 ; i<MAXJOBS ; i++){
+            //     kill(jobs[i].pid, SIGKILL);
+            // }
             exit(0);
             break;
         
         case 2:
-            listjobs(jobs);
+            for(int i=0 ; i<MAXJOBS ; i++){
+
+            }
             break;
     
         case 3:
@@ -226,8 +229,6 @@ void eval(char *cmdline)
             do_bgfg(argv);
             break;
 
-        case 5:
-            break;
     }
 
     return;
@@ -329,13 +330,14 @@ void do_bgfg(char **argv)
                 break;
             }
             if( i == MAXJOBS-1){
-                printf("%c%d: No such job\n",*(++argv[0]), *(++argv[1]));
+                printf("%c%d: No such job\n",'%', index);
                 break;
             }
         }
+
         if(jobs[job_i].state == ST){
             kill(target, SIGCONT);
-            jobs[job_i].state = FG;
+            jobs[job_i].state = BG;
             setpgid(0, 0);
         }
         return;        
@@ -353,7 +355,7 @@ void do_bgfg(char **argv)
                 break;
             }
             if( i == MAXJOBS-1){
-                printf("%c%d: No such job\n",*(++argv[1]), *(++argv[1]));
+                printf("%c%d: No such job\n",'%', index);
                 break;
             }
         }
@@ -361,6 +363,7 @@ void do_bgfg(char **argv)
             kill(target, SIGCONT);
             jobs[job_i].state = FG;
             setpgid(target, fg_pid);
+            waitfg(target);
         }
         return;
     }
@@ -372,6 +375,13 @@ void do_bgfg(char **argv)
  */
 void waitfg(pid_t pid)
 {
+    int status;
+    while(waitpid(pid, &status, 0) == pid){
+        // if(waitpid(pid, &status, 0)<0){
+        //     app_error("waitfg : wait foreground jobs fail\n");
+        // }
+        sleep(1);
+    }
     return;
 }
 
